@@ -34,23 +34,56 @@ th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--bd)}th:firs
 .rp{fill:var(--p)}.rl{fill:var(--l)}.ln{fill:none;stroke:var(--ac);stroke-width:2;stroke-linejoin:round}.dt{fill:var(--ac)}
 .lg{font-size:12px;color:var(--mut);margin-top:4px}.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 8px;vertical-align:-1px}.lg i:first-child{margin-left:0}.lg i.rp{background:var(--p)}.lg i.rl{background:var(--l)}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <h1>⛽ ติดตามการใช้น้ำมัน</h1>
 <div class="tabs" id="tabs"></div>
 <div id="view"></div>
 <script>
-var KEY='fuel_v1',tab='ov',per='m',sel=null,armed=null,msg='';
-var data=load(),PR=loadPR();
-function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return []}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){}}
+var KEY='fuel_v1',tab='ov',per='m',sel=null,armed=null,msg='',busy=false,user=null,ready=false;
+var SB_URL='https://ihgxyyyaustcqrgdslbl.supabase.co',SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloZ3h5eXlhdXN0Y3FyZ2RzbGJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMDQzMzYsImV4cCI6MjEwODc4MDMzNn0.wyLAkJ8X5Nd7n8Bwor-Lw99r3PHGyZ_nqn9GoyOzbi8';
+var SB=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
+var data=[],PR=loadPR();
+function localData(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return []}}
+function clean(e){return{date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters>0?+e.liters:null}}
+function mapRow(e){return{id:e.id,date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters==null?null:+e.liters}}
+function same(a,b){return a.date===b.date&&a.fuel===b.fuel&&+a.odo===+b.odo&&+a.amount===+b.amount}
+async function loadData(){
+  var all=[],from=0,r;
+  while(true){
+    r=await SB.from('fuel_logs').select('*').order('date').range(from,from+999);
+    if(r.error)throw r.error;
+    all=all.concat(r.data);
+    if(r.data.length<1000)break;
+    from+=1000;
+  }
+  data=all.map(mapRow);
+}
+async function insertRows(rows){
+  var add=[];
+  rows.forEach(function(x){
+    var r=clean(x);
+    if(!data.some(function(e){return same(e,r)})&&!add.some(function(e){return same(e,r)}))add.push(r);
+  });
+  for(var i=0;i<add.length;i+=300){
+    var r=await SB.from('fuel_logs').insert(add.slice(i,i+300)).select();
+    if(r.error)throw r.error;
+    r.data.forEach(function(e){data.push(mapRow(e))});
+  }
+  return add.length;
+}
 var NM={p:'น้ำมัน',l:'LPG',o:'อื่นๆ'};
 function loadPR(){try{var p=JSON.parse(localStorage.getItem('fuel_pr'));if(p&&p.p>0&&p.l>0)return p}catch(e){}return{p:40,l:15}}
 function lt(e){return e.liters>0?e.liters:e.amount/PR[e.fuel]}
 function prc(){return '<div class="card"><b>ราคา/ลิตรโดยประมาณ</b><div class="note">ใช้ประเมินลิตรของรายการที่ไม่ได้กรอกลิตร (ค่า กม./ลิตร จะมีเครื่องหมาย ~)</div><div class="fr"><div><label>น้ำมัน</label><input type="number" inputmode="decimal" value="'+PR.p+'" onchange="sp(\'p\',this.value)"></div><div><label>LPG</label><input type="number" inputmode="decimal" value="'+PR.l+'" onchange="sp(\'l\',this.value)"></div></div></div>'}
 function sp(k,v){v=+v;if(v>0){PR[k]=v;try{localStorage.setItem('fuel_pr',JSON.stringify(PR))}catch(e){}}render()}
 var SEED='24/12/23 p 253429 1000;24/12/23 l 253430 620;13/1/24 l 254096 600;26/1/24 l 254592 520;28/1/24 p 255206 1000;28/1/24 l 255207 680;7/2/24 l 255837 580;24/2/24 l 256487 690;10/3/24 l 257061 600;10/3/24 p 257192 1000;18/3/24 l 257785 700;31/3/24 l 258286 430;6/4/24 p 258863 500;7/4/24 l 258915 650;18/4/24 l 259581 680;20/4/24 p 259648 2020;1/5/24 l 260183 700;6/5/24 l 260707 600;24/5/24 l 261347 600;15/6/24 l 263157 500;23/6/24 p 263479 1930;30/6/24 l 263809 670;12/7/24 o 264224 789;13/7/24 l 264388 610;29/7/24 l 265038 650;12/8/24 l 265651 670;27/8/24 l 266273 710;1/9/24 p 266465 1870;8/9/24 l 267004 700;25/9/24 l 267635 670;4/10/24 l 268152 560;7/10/24 p 268789 1340;7/10/24 l 268793 710;13/10/24 l 269420 750;19/10/24 l 269982 550;26/10/24 l 270567 650;6/11/24 l 271235 700;17/11/24 p 271946 1800;17/11/24 l 271950 700;28/11/24 l 272615 700;7/12/24 l 273280 750;10/2/25 o 279685 1396;11/2/25 l 279970 680;23/2/25 l 280644 670;2/3/25 p 281227 1000;2/3/25 l 281227 670;10/3/25 l 281980 690;28/3/25 l 282452 550;8/4/25 l 283027 655;14/4/25 l 283648 680;20/4/25 p 283648 1000;21/4/25 l 284171 670;11/5/25 l 284842 680;7/6/25 l 285489 565;23/6/25 p 285778 500;29/6/25 l 286087 658;12/7/25 l 286641 660;11/8/25 l 287244 670;30/8/25 l 287865 680;30/8/25 p 287865 500;14/9/25 l 288465 620;5/10/25 l 289025 590;7/10/25 p 289147 1000;6/11/25 l 289873 360;6/11/25 p 289873 880;7/11/25 l 290355 714;9/11/25 l 290731 540;9/11/25 l 291136 570;9/11/25 l 291468 390;9/11/25 p 291468 210;7/12/25 l 292597 1300;24/12/25 l 293205 700;1/1/26 l 293760 670;12/1/26 l 294340 650;28/1/26 l 294901 650;11/2/26 l 295550 670;11/2/26 p 295555 1000;25/2/26 l 296170 700;10/3/26 l 296667 520;17/3/26 p 297031 1130;17/3/26 l 297035 420;4/4/26 l 297167 150;11/4/26 l 297623 450;17/4/26 l 297883 320;26/4/26 l 298512 680;1/5/26 l 298763 360;19/5/26 l 299282 540;26/5/26 l 299539 320;1/6/26 l 300044 520;14/6/26 l 300542 640;14/6/26 o 300548 1823;23/6/26 l 301139 660;5/7/26 l 301646 640;18/7/26 l 302268 630;21/7/26 p 302496 1680;29/7/26 l 302897 710;17/8/26 l 303507 640;14/9/26 l 304202 708;22/9/26 l 304779 483;10/10/26 l 305208 599;27/10/26 l 305791 648';
-function seed(){SEED.split(';').forEach(function(r){var p=r.split(' '),d=p[0].split('/'),o=+p[2],a=+p[3];var date='20'+d[2]+'-'+('0'+d[1]).slice(-2)+'-'+('0'+d[0]).slice(-2);if(data.some(function(e){return e.date===date&&e.odo===o&&e.fuel===p[1]&&e.amount===a}))return;data.push({id:'s'+date+p[1]+o,date:date,fuel:p[1],odo:o,amount:a,liters:null})});save();tab='ov';render()}
+async function seed(){
+  var rows=SEED.split(';').map(function(r){var p=r.split(' '),d=p[0].split('/');return{date:'20'+d[2]+'-'+('0'+d[1]).slice(-2)+'-'+('0'+d[0]).slice(-2),fuel:p[1],odo:+p[2],amount:+p[3],liters:null}});
+  try{await insertRows(rows)}catch(e){alert('นำเข้าไม่สำเร็จ: '+e.message)}
+  tab='ov';render();
+}
 function f(n,d){return(n==null||!isFinite(n))?'–':n.toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function fmtD(s){var p=s.split('-');return p[2]+'/'+p[1]+'/'+(+p[0]+543)}
@@ -163,7 +196,18 @@ function ov2(){
 }
 function setTab(t){tab=t;armed=null;msg='';render()}
 function setPer(p){per=p;sel=null;render()}
+function authv(){
+  return '<div class="card"><b>เข้าสู่ระบบ</b><div class="note">ข้อมูลเก็บบนเซิร์ฟเวอร์ ใช้ได้ทุกเครื่องที่ล็อกอินบัญชีเดียวกัน</div>'
+   +'<label>อีเมล</label><input id="em" type="email" autocomplete="email">'
+   +'<label>รหัสผ่าน (อย่างน้อย 6 ตัว)</label><input id="pw" type="password" autocomplete="current-password">'
+   +'<div class="msg" id="mg">'+msg+'</div>'
+   +'<button class="btn" onclick="login()">เข้าสู่ระบบ</button><button class="btn s" onclick="signup()">สมัครสมาชิก (ครั้งแรก)</button></div>';
+}
 function render(){
+  var tb=document.getElementById('tabs'),vw=document.getElementById('view');
+  if(!SB){tb.innerHTML='';vw.innerHTML='<div class="card">โหลดระบบฐานข้อมูลไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วรีเฟรชหน้า</div>';return}
+  if(!ready){tb.innerHTML='';vw.innerHTML='<div class="card">กำลังโหลด...</div>';return}
+  if(!user){tb.innerHTML='';vw.innerHTML=authv();return}
   document.getElementById('tabs').innerHTML=[['ov','ภาพรวม'],['add','เพิ่ม'],['hs','ประวัติ']].map(function(t){return '<button class="'+(tab===t[0]?'on':'')+'" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>'}).join('');
   var v=document.getElementById('view');
   if(tab==='ov')v.innerHTML=ov2();else if(tab==='add')v.innerHTML=addv();else v.innerHTML=hs();
@@ -207,12 +251,16 @@ function addv(){
    +'<div class="note">ถ้าไม่ใส่ลิตร ระบบจะประมาณจากราคา/ลิตรที่ตั้งไว้ในหน้าภาพรวม</div>';
 }
 function pl(){var a=+document.getElementById('a').value,l=+document.getElementById('li').value;document.getElementById('pp').textContent=(a>0&&l>0)?'ราคาเฉลี่ย '+f(a/l,2)+' บาท/ลิตร':''}
-function add(){
+async function add(){
   var d=document.getElementById('d').value,fu=document.getElementById('fu').value,o=+document.getElementById('o').value,a=+document.getElementById('a').value,l=+document.getElementById('li').value;
   var m=document.getElementById('mg');
   if(!d||!(o>0)||!(a>0)){m.textContent='กรอกวันที่ เลขไมล์ และจำนวนเงินให้ครบ';return}
-  data.push({id:Date.now()+''+Math.floor(Math.random()*1000),date:d,fuel:fu,odo:o,amount:a,liters:l>0?l:null});
-  save();msg='บันทึกแล้ว';tab='hs';render();
+  if(busy)return;busy=true;m.textContent='กำลังบันทึก...';
+  try{
+    var n=await insertRows([{date:d,fuel:fu,odo:o,amount:a,liters:l>0?l:null}]);
+    msg=n?'บันทึกแล้ว':'มีรายการนี้อยู่แล้ว';tab='hs';render();
+  }catch(e){m.textContent='บันทึกไม่สำเร็จ: '+e.message}
+  busy=false;
 }
 function hs(){
   var s=enrich().reverse();
@@ -222,20 +270,62 @@ function hs(){
     h+='<div class="row"><div><span class="tag '+e.fuel+'">'+NM[e.fuel]+'</span> '+fmtD(e.date)+'<div class="note">ไมล์ '+f(e.odo,0)+(e.dA>0?' (+'+f(e.dA,0)+' กม.)':'')+' · '+(e.liters>0?f(e.liters,1)+' ล. · ':'')+f(e.amount,0)+' บาท'+(e.liters>0?' · '+f(e.amount/e.liters,2)+' บ./ล.':'')+'</div></div>'
      +'<button class="x" onclick="del(\''+e.id+'\')">'+(armed===e.id?'ยืนยันลบ':'ลบ')+'</button></div>';
   });
-  h+='</div><div class="card"><button class="btn s" style="margin:0" onclick="seed()">โหลดข้อมูลย้อนหลัง (ธ.ค. 2566 – ต.ค. 2569)</button><div class="note">ข้ามรายการที่มีอยู่แล้ว</div></div><div class="card"><b>สำรองข้อมูล</b><div class="note">คัดลอกข้อความนี้เก็บไว้ หรือวางข้อมูลเดิมเพื่อกู้คืน ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น</div>'
+  h+='</div><div class="card"><button class="btn s" style="margin:0" onclick="seed()">โหลดข้อมูลย้อนหลัง (ธ.ค. 2566 – ต.ค. 2569)</button><div class="note">ข้ามรายการที่มีอยู่แล้ว</div>'+(localData().length?'<button class="btn s" onclick="impLocal()">นำเข้าข้อมูลที่เก็บในเครื่องนี้ ('+localData().length+' รายการ)</button>':'')+'</div><div class="card"><b>สำรองข้อมูล</b><div class="note">คัดลอกข้อความนี้เก็บไว้ หรือวางข้อมูลเดิมเพื่อกู้คืน ข้อมูลหลักอยู่บนเซิร์ฟเวอร์แล้ว ข้อความนี้เป็นสำเนาเพิ่มเติม วางเพื่อนำเข้าได้ (ข้ามรายการซ้ำ)</div>'
    +'<textarea id="bk" rows="4">'+JSON.stringify(data).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</textarea>'
-   +'<button class="btn s" onclick="imp()">กู้คืนจากข้อความด้านบน</button><div class="msg" id="mg">'+msg+'</div></div>';
+   +'<button class="btn s" onclick="imp()">นำเข้าจากข้อความด้านบน</button><div class="msg" id="mg">'+msg+'</div></div><div class="card"><div class="note">ล็อกอินเป็น '+String(user.email).replace(/</g,'&lt;')+'</div><button class="btn s" onclick="logout()">ออกจากระบบ</button></div>';
   msg='';return h;
 }
-function del(id){if(armed===id){data=data.filter(function(e){return e.id!==id});save();armed=null}else armed=id;render()}
-function imp(){
+async function del(id){
+  if(armed===id){
+    try{
+      var r=await SB.from('fuel_logs').delete().eq('id',id);
+      if(r.error)throw r.error;
+      data=data.filter(function(e){return e.id!==id});
+    }catch(e){msg='ลบไม่สำเร็จ: '+e.message}
+    armed=null;
+  }else armed=id;
+  render();
+}
+async function imp(){
+  var m=document.getElementById('mg');
   try{
     var d=JSON.parse(document.getElementById('bk').value);
     if(!Array.isArray(d)||d.some(function(e){return !e||!e.date||!(e.odo>0)||!(e.amount>0)||'plo'.indexOf(e.fuel)<0}))throw 0;
-    d.forEach(function(e){if(!e.id)e.id=Date.now()+''+Math.floor(Math.random()*100000)});
-    data=d;save();msg='กู้คืนแล้ว';render();
-  }catch(e){document.getElementById('mg').textContent='รูปแบบข้อมูลไม่ถูกต้อง'}
+    var n=await insertRows(d);
+    msg='นำเข้า '+n+' รายการ (ข้ามรายการที่ซ้ำ)';render();
+  }catch(e){m.textContent='รูปแบบข้อมูลไม่ถูกต้อง หรือนำเข้าไม่สำเร็จ'}
 }
+async function impLocal(){
+  try{var n=await insertRows(localData());msg='นำเข้าจากเครื่องนี้ '+n+' รายการ'}
+  catch(e){msg='นำเข้าไม่สำเร็จ: '+e.message}
+  render();
+}
+function val(id){return document.getElementById(id).value.trim()}
+function amsg(t){var m=document.getElementById('mg');if(m)m.textContent=t}
+async function login(){
+  var em=val('em'),pw=document.getElementById('pw').value;
+  if(!em||!pw){amsg('กรอกอีเมลและรหัสผ่าน');return}
+  amsg('กำลังเข้าสู่ระบบ...');
+  var r=await SB.auth.signInWithPassword({email:em,password:pw});
+  if(r.error)amsg('เข้าสู่ระบบไม่สำเร็จ: '+r.error.message);
+}
+async function signup(){
+  var em=val('em'),pw=document.getElementById('pw').value;
+  if(!em||pw.length<6){amsg('กรอกอีเมล และรหัสผ่านอย่างน้อย 6 ตัว');return}
+  amsg('กำลังสมัคร...');
+  var r=await SB.auth.signUp({email:em,password:pw});
+  if(r.error){amsg('สมัครไม่สำเร็จ: '+r.error.message);return}
+  if(!r.data.session)amsg('สมัครแล้ว ตรวจอีเมลแล้วกดลิงก์ยืนยัน จากนั้นกลับมาเข้าสู่ระบบ');
+}
+async function logout(){await SB.auth.signOut()}
+async function boot(sess){
+  if(ready&&user&&sess&&sess.user&&sess.user.id===user.id)return;
+  user=sess&&sess.user?sess.user:null;
+  if(!user){data=[];tab='ov'}
+  else{msg='';try{await loadData()}catch(e){data=[];alert('โหลดข้อมูลไม่สำเร็จ: '+e.message)}}
+  ready=true;render();
+}
+if(SB)SB.auth.onAuthStateChange(function(ev,sess){setTimeout(function(){boot(sess)},0)});
 render();
 </script>
 </body>
