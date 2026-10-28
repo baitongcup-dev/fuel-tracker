@@ -44,7 +44,7 @@ th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--bd)}th:firs
 var KEY='fuel_v1',tab='ov',per='m',sel=null,armed=null,msg='',busy=false,user=null,ready=false;
 var SB_URL='https://ihgxyyyaustcqrgdslbl.supabase.co',SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloZ3h5eXlhdXN0Y3FyZ2RzbGJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMDQzMzYsImV4cCI6MjEwODc4MDMzNn0.wyLAkJ8X5Nd7n8Bwor-Lw99r3PHGyZ_nqn9GoyOzbi8';
 var SB=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
-var data=[],PR=loadPR();
+var data=[],PRICES={p:[],l:[]},pdb=false,popen=false;
 function localData(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return []}}
 function clean(e){return{date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters>0?+e.liters:null}}
 function mapRow(e){return{id:e.id,date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters==null?null:+e.liters}}
@@ -74,10 +74,59 @@ async function insertRows(rows){
   return add.length;
 }
 var NM={p:'น้ำมัน',l:'LPG',o:'อื่นๆ'};
-function loadPR(){try{var p=JSON.parse(localStorage.getItem('fuel_pr'));if(p&&p.p>0&&p.l>0)return p}catch(e){}return{p:40,l:15}}
-function lt(e){return e.liters>0?e.liters:e.amount/PR[e.fuel]}
-function prc(){return '<div class="card"><b>ราคา/ลิตรโดยประมาณ</b><div class="note">ใช้ประเมินลิตรของรายการที่ไม่ได้กรอกลิตร (ค่า กม./ลิตร จะมีเครื่องหมาย ~)</div><div class="fr"><div><label>น้ำมัน</label><input type="number" inputmode="decimal" value="'+PR.p+'" onchange="sp(\'p\',this.value)"></div><div><label>LPG</label><input type="number" inputmode="decimal" value="'+PR.l+'" onchange="sp(\'l\',this.value)"></div></div></div>'}
-function sp(k,v){v=+v;if(v>0){PR[k]=v;try{localStorage.setItem('fuel_pr',JSON.stringify(PR))}catch(e){}}render()}
+var DEFP={
+p:[['2023-01-01',34.88],['2023-07-01',37.05],['2023-09-01',39.38],['2023-11-01',35.18],['2024-01-19',33.78],['2024-04-01',38.38],['2024-07-01',37.88],['2024-10-01',34.88],['2025-01-01',34.18],['2025-05-01',34.58],['2025-08-01',33.28],['2025-10-30',31.48],['2026-01-01',37.68],['2026-04-01',38.85],['2026-05-01',38.48],['2026-06-01',38.15],['2026-07-03',37.08],['2026-08-12',36.47],['2026-09-02',37.92],['2026-10-09',41.07],['2026-10-28',41.67],['2026-10-29',41.17]],
+l:[['2023-01-01',14.50],['2023-03-01',15.11],['2026-01-01',15.24]]};
+function defRows(){var r=[];['p','l'].forEach(function(k){DEFP[k].forEach(function(x,i){r.push({id:'d'+k+i,fuel:k,from_date:x[0],price:x[1]})})});return r}
+function priceRows(){var r=[];['p','l'].forEach(function(k){PRICES[k].forEach(function(x){r.push({id:x.id,fuel:k,from_date:x.from_date,price:x.price})})});return r}
+function setPrices(rows){
+  PRICES={p:[],l:[]};
+  rows.forEach(function(r){if(PRICES[r.fuel])PRICES[r.fuel].push({id:r.id,from_date:r.from_date,price:+r.price})});
+  ['p','l'].forEach(function(k){PRICES[k].sort(function(a,b){return a.from_date<b.from_date?-1:a.from_date>b.from_date?1:0})});
+}
+function priceAt(f,d){
+  var a=PRICES[f];if(!a||!a.length)return f==='p'?40:15;
+  var r=a[0].price;
+  for(var i=0;i<a.length;i++){if(a[i].from_date<=d)r=a[i].price;else break}
+  return r;
+}
+function lt(e){return e.liters>0?e.liters:e.amount/priceAt(e.fuel,e.date)}
+async function loadPrices(){
+  var r=await SB.from('fuel_prices').select('*');
+  if(r.error){pdb=false;setPrices(defRows());return}
+  pdb=true;
+  if(!r.data.length){
+    var ins=defRows().map(function(x){return{fuel:x.fuel,from_date:x.from_date,price:x.price}});
+    var q=await SB.from('fuel_prices').insert(ins).select();
+    if(!q.error)r=q;
+  }
+  if(r.data.length)setPrices(r.data);else setPrices(defRows());
+}
+async function addPrice(){
+  var fu=document.getElementById('pf').value,d=document.getElementById('pd').value,v=+document.getElementById('pv').value;
+  if(!d||!(v>0)){alert('กรอกวันที่และราคา');return}
+  var r=await SB.from('fuel_prices').insert({fuel:fu,from_date:d,price:v}).select();
+  if(r.error){alert('บันทึกไม่สำเร็จ: '+r.error.message);return}
+  var rows=priceRows();rows.push(r.data[0]);setPrices(rows);popen=true;render();
+}
+async function delPrice(id){
+  var r=await SB.from('fuel_prices').delete().eq('id',id);
+  if(r.error){alert('ลบไม่สำเร็จ: '+r.error.message);return}
+  setPrices(priceRows().filter(function(x){return x.id!==id}));popen=true;render();
+}
+function prc(){
+  var h='<details class="card"'+(popen?' open':'')+' ontoggle="popen=this.open"><summary><b>ราคา/ลิตรโดยประมาณ (ตามวันที่)</b></summary><div class="note" style="margin:6px 0">ใช้ประเมินลิตรของรายการที่ไม่ได้กรอกลิตร โดยใช้ราคาที่มีผล ณ วันที่เติม</div>';
+  if(!pdb)h+='<div class="msg">ยังแก้ราคาไม่ได้ (ยังไม่ได้สร้างตาราง fuel_prices) ตอนนี้ใช้ราคาเริ่มต้น</div>';
+  [['p','น้ำมัน 91','fp'],['l','LPG','fl']].forEach(function(t){
+    h+='<div style="margin-top:8px"><b class="'+t[2]+'">'+t[1]+'</b>';
+    PRICES[t[0]].slice().reverse().forEach(function(x){
+      h+='<div class="row"><div>'+fmtD(x.from_date)+' · '+f(x.price,2)+' บ./ล.</div>'+(pdb?'<button class="x" onclick="delPrice(\''+x.id+'\')">ลบ</button>':'')+'</div>';
+    });
+    h+='</div>';
+  });
+  if(pdb)h+='<div style="margin-top:10px"><b>เพิ่มราคา</b><div class="fr"><div><label>ชนิด</label><select id="pf"><option value="p">น้ำมัน 91</option><option value="l">LPG</option></select></div><div><label>มีผลตั้งแต่</label><input type="date" id="pd" value="'+today()+'"></div><div><label>บาท/ลิตร</label><input id="pv" type="number" inputmode="decimal" step="0.01"></div></div><button class="btn s" onclick="addPrice()">เพิ่มราคา</button></div>';
+  return h+'</details>';
+}
 var SEED='24/12/23 p 253429 1000;24/12/23 l 253430 620;13/1/24 l 254096 600;26/1/24 l 254592 520;28/1/24 p 255206 1000;28/1/24 l 255207 680;7/2/24 l 255837 580;24/2/24 l 256487 690;10/3/24 l 257061 600;10/3/24 p 257192 1000;18/3/24 l 257785 700;31/3/24 l 258286 430;6/4/24 p 258863 500;7/4/24 l 258915 650;18/4/24 l 259581 680;20/4/24 p 259648 2020;1/5/24 l 260183 700;6/5/24 l 260707 600;24/5/24 l 261347 600;15/6/24 l 263157 500;23/6/24 p 263479 1930;30/6/24 l 263809 670;12/7/24 o 264224 789;13/7/24 l 264388 610;29/7/24 l 265038 650;12/8/24 l 265651 670;27/8/24 l 266273 710;1/9/24 p 266465 1870;8/9/24 l 267004 700;25/9/24 l 267635 670;4/10/24 l 268152 560;7/10/24 p 268789 1340;7/10/24 l 268793 710;13/10/24 l 269420 750;19/10/24 l 269982 550;26/10/24 l 270567 650;6/11/24 l 271235 700;17/11/24 p 271946 1800;17/11/24 l 271950 700;28/11/24 l 272615 700;7/12/24 l 273280 750;10/2/25 o 279685 1396;11/2/25 l 279970 680;23/2/25 l 280644 670;2/3/25 p 281227 1000;2/3/25 l 281227 670;10/3/25 l 281980 690;28/3/25 l 282452 550;8/4/25 l 283027 655;14/4/25 l 283648 680;20/4/25 p 283648 1000;21/4/25 l 284171 670;11/5/25 l 284842 680;7/6/25 l 285489 565;23/6/25 p 285778 500;29/6/25 l 286087 658;12/7/25 l 286641 660;11/8/25 l 287244 670;30/8/25 l 287865 680;30/8/25 p 287865 500;14/9/25 l 288465 620;5/10/25 l 289025 590;7/10/25 p 289147 1000;6/11/25 l 289873 360;6/11/25 p 289873 880;7/11/25 l 290355 714;9/11/25 l 290731 540;9/11/25 l 291136 570;9/11/25 l 291468 390;9/11/25 p 291468 210;7/12/25 l 292597 1300;24/12/25 l 293205 700;1/1/26 l 293760 670;12/1/26 l 294340 650;28/1/26 l 294901 650;11/2/26 l 295550 670;11/2/26 p 295555 1000;25/2/26 l 296170 700;10/3/26 l 296667 520;17/3/26 p 297031 1130;17/3/26 l 297035 420;4/4/26 l 297167 150;11/4/26 l 297623 450;17/4/26 l 297883 320;26/4/26 l 298512 680;1/5/26 l 298763 360;19/5/26 l 299282 540;26/5/26 l 299539 320;1/6/26 l 300044 520;14/6/26 l 300542 640;14/6/26 o 300548 1823;23/6/26 l 301139 660;5/7/26 l 301646 640;18/7/26 l 302268 630;21/7/26 p 302496 1680;29/7/26 l 302897 710;17/8/26 l 303507 640;14/9/26 l 304202 708;22/9/26 l 304779 483;10/10/26 l 305208 599;27/10/26 l 305791 648';
 async function seed(){
   var rows=SEED.split(';').map(function(r){var p=r.split(' '),d=p[0].split('/');return{date:'20'+d[2]+'-'+('0'+d[1]).slice(-2)+'-'+('0'+d[0]).slice(-2),fuel:p[1],odo:+p[2],amount:+p[3],liters:null}});
@@ -322,7 +371,7 @@ async function boot(sess){
   if(ready&&user&&sess&&sess.user&&sess.user.id===user.id)return;
   user=sess&&sess.user?sess.user:null;
   if(!user){data=[];tab='ov'}
-  else{msg='';try{await loadData()}catch(e){data=[];alert('โหลดข้อมูลไม่สำเร็จ: '+e.message)}}
+  else{msg='';try{await loadData();await loadPrices()}catch(e){data=[];alert('โหลดข้อมูลไม่สำเร็จ: '+e.message)}}
   ready=true;render();
 }
 if(SB)SB.auth.onAuthStateChange(function(ev,sess){setTimeout(function(){boot(sess)},0)});
