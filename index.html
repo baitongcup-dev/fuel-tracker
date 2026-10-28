@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ติดตามการใช้น้ำมัน</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--bd:#e3e6ea;--ac:#2563eb;--p:#ea580c;--l:#0d9488;--bad:#dc2626;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111418;--card:#1b2026;--tx:#e8eaed;--mut:#9aa3ad;--bd:#2c333b;--ac:#60a5fa;--p:#fb923c;--l:#2dd4bf;--bad:#f87171;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111418;--card:#1b2026;--tx:#e8eaed;--mut:#9aa3ad;--bd:#2c333b;--ac:#60a5fa;--p:#fb923c;--l:#2dd4bf;--bad:#f87171;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Sarabun","Noto Sans Thai",sans-serif;max-width:560px;margin:0 auto;padding:12px 12px 40px}
+h1{font-size:18px;margin:4px 0 10px}
+.tabs,.seg{display:flex;gap:6px;margin-bottom:10px}
+.tabs button,.seg button{flex:1;padding:10px 4px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;font:inherit}
+.tabs button.on,.seg button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.k{color:var(--mut);font-size:12px}.v{font-size:20px;font-weight:600}
+.fp{color:var(--p)}.fl{color:var(--l)}
+label{display:block;font-size:13px;color:var(--mut);margin:8px 0 3px}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+.btn{width:100%;padding:12px;border:0;border-radius:10px;background:var(--ac);color:#fff;font:inherit;font-weight:600;margin-top:12px}
+.btn.s{background:var(--card);color:var(--tx);border:1px solid var(--bd);margin-top:6px}
+.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}th{color:var(--mut);font-weight:500}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.row:last-child{border:0}.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;color:#fff}
+.tag.p{background:var(--p)}.tag.l{background:var(--l)}.tag.o{background:var(--mut)}
+.x{border:1px solid var(--bd);background:none;color:var(--bad);border-radius:8px;padding:4px 10px;font:inherit}
+.note{font-size:12px;color:var(--mut)}.msg{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+.fr{display:flex;gap:8px}.fr>*{flex:1}
+.ch{width:100%;height:auto;display:block}.gl{stroke:var(--bd);stroke-width:1}.ax{fill:var(--mut);font-size:9px}
+.rp{fill:var(--p)}.rl{fill:var(--l)}.ln{fill:none;stroke:var(--ac);stroke-width:2;stroke-linejoin:round}.dt{fill:var(--ac)}
+.lg{font-size:12px;color:var(--mut);margin-top:4px}.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 8px;vertical-align:-1px}.lg i:first-child{margin-left:0}.lg i.rp{background:var(--p)}.lg i.rl{background:var(--l)}
+</style>
+</head>
+<body>
+<h1>⛽ ติดตามการใช้น้ำมัน</h1>
+<div class="tabs" id="tabs"></div>
+<div id="view"></div>
+<script>
+var KEY='fuel_v1',tab='ov',per='m',sel=null,armed=null,msg='';
+var data=load(),PR=loadPR();
+function load(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return []}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){}}
+var NM={p:'น้ำมัน',l:'LPG',o:'อื่นๆ'};
+function loadPR(){try{var p=JSON.parse(localStorage.getItem('fuel_pr'));if(p&&p.p>0&&p.l>0)return p}catch(e){}return{p:40,l:15}}
+function lt(e){return e.liters>0?e.liters:e.amount/PR[e.fuel]}
+function prc(){return '<div class="card"><b>ราคา/ลิตรโดยประมาณ</b><div class="note">ใช้ประเมินลิตรของรายการที่ไม่ได้กรอกลิตร (ค่า กม./ลิตร จะมีเครื่องหมาย ~)</div><div class="fr"><div><label>น้ำมัน</label><input type="number" inputmode="decimal" value="'+PR.p+'" onchange="sp(\'p\',this.value)"></div><div><label>LPG</label><input type="number" inputmode="decimal" value="'+PR.l+'" onchange="sp(\'l\',this.value)"></div></div></div>'}
+function sp(k,v){v=+v;if(v>0){PR[k]=v;try{localStorage.setItem('fuel_pr',JSON.stringify(PR))}catch(e){}}render()}
+var SEED='24/12/23 p 253429 1000;24/12/23 l 253430 620;13/1/24 l 254096 600;26/1/24 l 254592 520;28/1/24 p 255206 1000;28/1/24 l 255207 680;7/2/24 l 255837 580;24/2/24 l 256487 690;10/3/24 l 257061 600;10/3/24 p 257192 1000;18/3/24 l 257785 700;31/3/24 l 258286 430;6/4/24 p 258863 500;7/4/24 l 258915 650;18/4/24 l 259581 680;20/4/24 p 259648 2020;1/5/24 l 260183 700;6/5/24 l 260707 600;24/5/24 l 261347 600;15/6/24 l 263157 500;23/6/24 p 263479 1930;30/6/24 l 263809 670;12/7/24 o 264224 789;13/7/24 l 264388 610;29/7/24 l 265038 650;12/8/24 l 265651 670;27/8/24 l 266273 710;1/9/24 p 266465 1870;8/9/24 l 267004 700;25/9/24 l 267635 670;4/10/24 l 268152 560;7/10/24 p 268789 1340;7/10/24 l 268793 710;13/10/24 l 269420 750;19/10/24 l 269982 550;26/10/24 l 270567 650;6/11/24 l 271235 700;17/11/24 p 271946 1800;17/11/24 l 271950 700;28/11/24 l 272615 700;7/12/24 l 273280 750;10/2/25 o 279685 1396;11/2/25 l 279970 680;23/2/25 l 280644 670;2/3/25 p 281227 1000;2/3/25 l 281227 670;10/3/25 l 281980 690;28/3/25 l 282452 550;8/4/25 l 283027 655;14/4/25 l 283648 680;20/4/25 p 283648 1000;21/4/25 l 284171 670;11/5/25 l 284842 680;7/6/25 l 285489 565;23/6/25 p 285778 500;29/6/25 l 286087 658;12/7/25 l 286641 660;11/8/25 l 287244 670;30/8/25 l 287865 680;30/8/25 p 287865 500;14/9/25 l 288465 620;5/10/25 l 289025 590;7/10/25 p 289147 1000;6/11/25 l 289873 360;6/11/25 p 289873 880;7/11/25 l 290355 714;9/11/25 l 290731 540;9/11/25 l 291136 570;9/11/25 l 291468 390;9/11/25 p 291468 210;7/12/25 l 292597 1300;24/12/25 l 293205 700;1/1/26 l 293760 670;12/1/26 l 294340 650;28/1/26 l 294901 650;11/2/26 l 295550 670;11/2/26 p 295555 1000;25/2/26 l 296170 700;10/3/26 l 296667 520;17/3/26 p 297031 1130;17/3/26 l 297035 420;4/4/26 l 297167 150;11/4/26 l 297623 450;17/4/26 l 297883 320;26/4/26 l 298512 680;1/5/26 l 298763 360;19/5/26 l 299282 540;26/5/26 l 299539 320;1/6/26 l 300044 520;14/6/26 l 300542 640;14/6/26 o 300548 1823;23/6/26 l 301139 660;5/7/26 l 301646 640;18/7/26 l 302268 630;21/7/26 p 302496 1680;29/7/26 l 302897 710;17/8/26 l 303507 640;14/9/26 l 304202 708;22/9/26 l 304779 483;10/10/26 l 305208 599;27/10/26 l 305791 648';
+function seed(){SEED.split(';').forEach(function(r){var p=r.split(' '),d=p[0].split('/'),o=+p[2],a=+p[3];var date='20'+d[2]+'-'+('0'+d[1]).slice(-2)+'-'+('0'+d[0]).slice(-2);if(data.some(function(e){return e.date===date&&e.odo===o&&e.fuel===p[1]&&e.amount===a}))return;data.push({id:'s'+date+p[1]+o,date:date,fuel:p[1],odo:o,amount:a,liters:null})});save();tab='ov';render()}
+function f(n,d){return(n==null||!isFinite(n))?'–':n.toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function fmtD(s){var p=s.split('-');return p[2]+'/'+p[1]+'/'+(+p[0]+543)}
+function bk(date){
+  if(per==='a')return 'all';
+  if(per==='m')return date.slice(0,7);
+  var d=new Date(date+'T00:00:00');d.setDate(d.getDate()-((d.getDay()+6)%7));
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function bl(k){
+  if(k==='all')return 'ทั้งหมด';
+  if(per==='m'){var p=k.split('-');return ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][+p[1]-1]+' '+(+p[0]+543)}
+  return 'สัปดาห์ '+fmtD(k).slice(0,5);
+}
+function enrich(){
+  var s=data.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.odo-b.odo});
+  var last={},prev=null;
+  s.forEach(function(e){
+    e.dA=e.dS=null;if(e.fuel==='o')return;
+    if(prev!=null){var d=e.odo-prev;e.dA=(d>=0&&d<=1500)?d:null}
+    prev=e.odo;
+    if(last[e.fuel]!=null){var q=e.odo-last[e.fuel];e.dS=(q>0&&q<=5000)?q:null}
+    last[e.fuel]=e.odo;
+  });
+  return s;
+}
+function stats(list){
+  var r={baht:0,L:0,dist:0,Lc:0,bc:0,p:{n:0,L:0,baht:0,d:0,Ld:0},l:{n:0,L:0,baht:0,d:0,Ld:0}};
+  list.forEach(function(e){
+    if(e.fuel==='o')return;
+    var L=lt(e);if(!(e.liters>0))r.est=true;
+    r.baht+=e.amount;r.L+=L;
+    if(e.dA!=null){r.dist+=e.dA;r.Lc+=L;r.bc+=e.amount}
+    var x=r[e.fuel];x.n++;x.L+=L;x.baht+=e.amount;
+    if(e.dS!=null){x.d+=e.dS;x.Ld+=L}
+  });
+  r.kml=r.Lc?r.dist/r.Lc:null;r.bpk=r.dist?r.bc/r.dist:null;
+  ['p','l'].forEach(function(k){r[k].kml=r[k].Ld?r[k].d/r[k].Ld:null;r[k].bpl=r[k].L?r[k].baht/r[k].L:null});
+  return r;
+}
+function dd(s){return Math.round(Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10))/864e5)}
+function ds(n){var d=new Date(n*864e5);return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2)}
+function spread(s){
+  var D={},prev=null,nxt={},nd={},mx=0,ps={};
+  s.forEach(function(e){if(e.fuel!=='o'){var n=dd(e.date);if(n>mx)mx=n}});
+  for(var j=s.length-1;j>=0;j--){var q=s[j];if(q.fuel==='o')continue;nd[j]=nxt[q.fuel];nxt[q.fuel]=dd(q.date)}
+  function g(n){return D[n]||(D[n]={dist:0,cov:0,Lp:0,Ll:0,Bp:0,Bl:0})}
+  s.forEach(function(e,j){
+    if(e.fuel==='o')return;
+    var n=dd(e.date),a,m,i,x,o;
+    if(prev&&e.dA!=null){a=dd(prev.date);m=Math.max(1,n-a);for(i=1;i<=m;i++){x=n>a?a+i:n;o=g(x);o.dist+=e.dA/m;o.cov=1}}
+    prev=e;
+    var k=e.fuel,Lq=lt(e),nx=nd[j],sp,lo,hi;
+    if(nx!=null){sp=nx-n;if(sp>=1){lo=n+1;hi=nx;ps[k]=sp}else{lo=hi=n;sp=1}}
+    else{sp=Math.max(ps[k]||30,mx-n);lo=n+1;hi=mx}
+    for(i=lo;i<=hi;i++){o=g(i);o['L'+k]+=Lq/sp;o['B'+k]+=e.amount/sp}
+  });
+  return D;
+}
+function chartHtml(D){
+  var sv=per;if(per==='a')per='m';
+  var C={},MN=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  Object.keys(D).forEach(function(d){var k=bk(ds(+d)),c=C[k]||(C[k]={dist:0,Bp:0,Bl:0,cL:0}),o=D[d];c.dist+=o.dist;c.Bp+=o.Bp;c.Bl+=o.Bl;if(o.cov)c.cL+=o.Lp+o.Ll});
+  var ks=Object.keys(C).sort();ks=ks.slice(-(per==='w'?26:24));
+  var lb=ks.map(function(k){if(per==='m'){var p=k.split('-');return MN[+p[1]-1]+' '+String(+p[0]+543).slice(2)}return fmtD(k).slice(0,5)});
+  per=sv;
+  var n=ks.length;if(n<2)return '';
+  var W=360,H=190,L=38,R=6,T=10,Bm=30,pw=W-L-R,ph=H-T-Bm,step=Math.ceil(n/6),i,g,y;
+  function xc(j){return L+pw*(j+0.5)/n}
+  var xl='';for(i=0;i<n;i++)if((n-1-i)%step===0)xl+='<text class="ax" x="'+xc(i).toFixed(1)+'" y="'+(H-12)+'" text-anchor="middle">'+lb[i]+'</text>';
+  var mx=0;ks.forEach(function(k){mx=Math.max(mx,C[k].Bp+C[k].Bl)});if(!mx)mx=1;
+  var s1='';for(g=0;g<=4;g++){y=T+ph*(1-g/4);s1+='<line class="gl" x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'"/><text class="ax" x="'+(L-4)+'" y="'+(y+3)+'" text-anchor="end">'+f(mx*g/4,0)+'</text>'}
+  var bw=pw/n*0.7;
+  ks.forEach(function(k,j){var c=C[k],hp=c.Bp/mx*ph,hl=c.Bl/mx*ph,x=xc(j)-bw/2;s1+='<rect class="rl" x="'+x.toFixed(1)+'" y="'+(T+ph-hl).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hl.toFixed(1)+'"/><rect class="rp" x="'+x.toFixed(1)+'" y="'+(T+ph-hl-hp).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hp.toFixed(1)+'"/>'});
+  var ttl=sv==='w'?'รายสัปดาห์ (26 สัปดาห์ล่าสุด)':'รายเดือน (24 เดือนล่าสุด)';
+  var h='<div class="card"><b>ค่าใช้จ่าย (บาท) '+ttl+'</b><svg class="ch" viewBox="0 0 '+W+' '+H+'">'+s1+xl+'</svg><div class="lg"><i class="rp"></i>น้ำมัน<i class="rl"></i>LPG</div></div>';
+  var v=ks.map(function(k){var c=C[k];return(c.cL>0&&c.dist>0)?c.dist/c.cL:null});
+  var vs=v.filter(function(q){return q!=null});
+  if(vs.length>1){
+    var lo=Math.min.apply(null,vs),hi=Math.max.apply(null,vs),pad=(hi-lo)*0.15||1;lo-=pad;hi+=pad;
+    var yv=function(q){return T+ph*(1-(q-lo)/(hi-lo))};
+    var s2='';for(g=0;g<=4;g++){y=T+ph*(1-g/4);s2+='<line class="gl" x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'"/><text class="ax" x="'+(L-4)+'" y="'+(y+3)+'" text-anchor="end">'+f(lo+(hi-lo)*g/4,1)+'</text>'}
+    var d='',pen=false,dots='';
+    v.forEach(function(q,j){if(q==null){pen=false;return}d+=(pen?' L ':' M ')+xc(j).toFixed(1)+' '+yv(q).toFixed(1);pen=true;dots+='<circle class="dt" cx="'+xc(j).toFixed(1)+'" cy="'+yv(q).toFixed(1)+'" r="2.5"/>'});
+    h+='<div class="card"><b>กม./ลิตร รวม 2 ระบบ '+ttl+'</b><svg class="ch" viewBox="0 0 '+W+' '+H+'">'+s2+xl+'<path class="ln" d="'+d+'"/>'+dots+'</svg></div>';
+  }
+  return h;
+}
+function ov2(){
+  var s=enrich();if(!s.length)return ov();
+  var h='<div class="seg">'+[['w','สัปดาห์'],['m','เดือน'],['a','ทั้งหมด']].map(function(t){return '<button class="'+(per===t[0]?'on':'')+'" onclick="setPer(\''+t[0]+'\')">'+t[1]+'</button>'}).join('')+'</div>';
+  var D=spread(s),B={};
+  Object.keys(D).forEach(function(n){var k=bk(ds(+n)),b=B[k]||(B[k]={dist:0,Lp:0,Ll:0,Bp:0,Bl:0,cL:0,cB:0,cBp:0,cBl:0}),o=D[n];b.dist+=o.dist;b.Lp+=o.Lp;b.Ll+=o.Ll;b.Bp+=o.Bp;b.Bl+=o.Bl;if(o.cov){b.cL+=o.Lp+o.Ll;b.cB+=o.Bp+o.Bl;b.cBp+=o.Bp;b.cBl+=o.Bl}});
+  var keys=Object.keys(B).sort().reverse();
+  if(!sel||!B[sel])sel=keys[0];
+  if(per!=='a')h+='<select onchange="sel=this.value;render()" style="margin-bottom:10px">'+keys.map(function(k){return '<option value="'+k+'"'+(k===sel?' selected':'')+'>'+bl(k)+'</option>'}).join('')+'</select>';
+  var est=s.some(function(e){return e.fuel!=='o'&&!(e.liters>0)});
+  function m(q){var T=q.Bp+q.Bl;return{T:T,kml:(q.cL&&q.dist)?q.dist/q.cL:null,bpk:q.dist?q.cB/q.dist:null,sp:T?q.Bp/T*100:null,sl:T?q.Bl/T*100:null}}
+  var r=B[sel],x=m(r);
+  h+='<div class="card"><div class="grid"><div><div class="k">ระยะทาง (กม.)</div><div class="v">'+f(r.dist,0)+'</div></div><div><div class="k">ค่าใช้จ่ายรวม (บาท)</div><div class="v">'+f(x.T,0)+'</div></div><div><div class="k">กม./ลิตร รวม 2 ระบบ</div><div class="v">'+(est?'~':'')+f(x.kml,2)+'</div></div><div><div class="k">บาท/กม.</div><div class="v">'+f(x.bpk,2)+'</div></div></div></div>';
+  [['p','น้ำมัน','fp'],['l','LPG','fl']].forEach(function(t){
+    var k=t[0],Lk=r['L'+k],Bk=r['B'+k];
+    h+='<div class="card"><b class="'+t[2]+'">'+t[1]+'</b> <span class="note">สัดส่วนค่าใช้จ่าย '+f(x.T?Bk/x.T*100:null,0)+'%</span><div class="grid" style="margin-top:6px"><div><div class="k">ลิตร</div><div class="v">'+f(Lk,1)+'</div></div><div><div class="k">บาท</div><div class="v">'+f(Bk,0)+'</div></div><div><div class="k">บาท/ลิตร</div><div class="v">'+f(Lk?Bk/Lk:null,2)+'</div></div><div><div class="k">บาท/กม.</div><div class="v">'+f(r.dist?r['cB'+k]/r.dist:null,2)+'</div></div></div></div>';
+  });
+  h+=chartHtml(D);
+  h+='<div class="card"><b>เทียบทุกช่วงเวลา</b><div class="sc"><table><tr><th>ช่วง</th><th>กม.</th><th>บาท</th><th>กม./ล.</th><th>บาท/กม.</th><th class="fp">%น้ำมัน</th></tr>';
+  keys.forEach(function(k){var q=B[k],y=m(q);h+='<tr><td>'+bl(k)+'</td><td>'+f(q.dist,0)+'</td><td>'+f(y.T,0)+'</td><td>'+f(y.kml,2)+'</td><td>'+f(y.bpk,2)+'</td><td>'+f(y.sp,0)+'</td></tr>'});
+  h+='</table></div></div>'+prc()+'<div class="note">การเติมแต่ละครั้งถูกกระจายรายวันนับจากวันที่เติมไปจนถึงการเติมเชื้อเพลิงชนิดเดียวกันครั้งถัดไป ครั้งล่าสุดนับเฉพาะส่วนที่ใช้ไปแล้ว ช่วงที่ไมล์ขาดหายจะไม่นับระยะทางและค่าใช้จ่ายในส่วน กม./ลิตร และ บาท/กม. การแยก กม./ลิตร รายเชื้อเพลิงทำไม่ได้ เพราะรถใช้ 2 ระบบสลับกัน จึงแสดงสัดส่วนและ บาท/กม. แทน</div>';
+  return h;
+}
+function setTab(t){tab=t;armed=null;msg='';render()}
+function setPer(p){per=p;sel=null;render()}
+function render(){
+  document.getElementById('tabs').innerHTML=[['ov','ภาพรวม'],['add','เพิ่ม'],['hs','ประวัติ']].map(function(t){return '<button class="'+(tab===t[0]?'on':'')+'" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>'}).join('');
+  var v=document.getElementById('view');
+  if(tab==='ov')v.innerHTML=ov2();else if(tab==='add')v.innerHTML=addv();else v.innerHTML=hs();
+}
+function ov(){
+  var s=enrich();
+  var h='<div class="seg">'+[['w','สัปดาห์'],['m','เดือน'],['a','ทั้งหมด']].map(function(t){return '<button class="'+(per===t[0]?'on':'')+'" onclick="setPer(\''+t[0]+'\')">'+t[1]+'</button>'}).join('')+'</div>';
+  if(!s.length)return h+'<div class="card">ยังไม่มีข้อมูล<button class="btn" onclick="seed()">โหลดข้อมูลย้อนหลัง (ธ.ค. 2566 – ต.ค. 2569)</button><div class="note" style="margin-top:8px">หรือไปแท็บ "เพิ่ม" เพื่อบันทึกเอง</div></div>';
+  var keys=[],map={};
+  s.forEach(function(e){var k=bk(e.date);if(!map[k]){map[k]=[];keys.push(k)}map[k].push(e)});
+  keys.sort().reverse();
+  if(!sel||!map[sel])sel=keys[0];
+  if(per!=='a')h+='<select onchange="sel=this.value;render()" style="margin-bottom:10px">'+keys.map(function(k){return '<option value="'+k+'"'+(k===sel?' selected':'')+'>'+bl(k)+'</option>'}).join('')+'</select>';
+  var r=stats(map[sel]);
+  h+='<div class="card"><div class="grid">'
+   +'<div><div class="k">ระยะทาง (กม.)</div><div class="v">'+f(r.dist,0)+'</div></div>'
+   +'<div><div class="k">ค่าใช้จ่ายรวม (บาท)</div><div class="v">'+f(r.baht,0)+'</div></div>'
+   +'<div><div class="k">กม./ลิตร รวม 2 ระบบ</div><div class="v">'+(r.est?'~':'')+f(r.kml,2)+'</div></div>'
+   +'<div><div class="k">บาท/กม.</div><div class="v">'+f(r.bpk,2)+'</div></div></div></div>';
+  [['p','น้ำมัน','fp'],['l','LPG','fl']].forEach(function(t){
+    var x=r[t[0]];
+    h+='<div class="card"><b class="'+t[2]+'">'+t[1]+'</b> <span class="note">('+x.n+' ครั้ง)</span><div class="grid" style="margin-top:6px">'
+     +'<div><div class="k">ลิตร</div><div class="v">'+f(x.L,1)+'</div></div>'
+     +'<div><div class="k">บาท</div><div class="v">'+f(x.baht,0)+'</div></div>'
+     +'<div><div class="k">บาท/ลิตร เฉลี่ย</div><div class="v">'+f(x.bpl,2)+'</div></div>'
+     +'<div><div class="k">กม./ลิตร</div><div class="v">'+f(x.kml,2)+'</div></div></div></div>';
+  });
+  h+='<div class="card"><b>เทียบทุกช่วงเวลา</b><div class="sc"><table><tr><th>ช่วง</th><th>กม.</th><th>บาท</th><th>กม./ล.รวม</th><th class="fp">น้ำมัน</th><th class="fl">LPG</th></tr>';
+  keys.forEach(function(k){var q=stats(map[k]);h+='<tr><td>'+bl(k)+'</td><td>'+f(q.dist,0)+'</td><td>'+f(q.baht,0)+'</td><td>'+f(q.kml,2)+'</td><td>'+f(q.p.kml,2)+'</td><td>'+f(q.l.kml,2)+'</td></tr>'});
+  h+='</table></div></div>'+prc()+'<div class="note">ช่วงที่ไม่มีบันทึกต่อเนื่อง (ไมล์ข้ามเกิน 1,500 กม.) จะไม่นับระยะทาง กม./ลิตร คำนวณจากระยะทางระหว่างการเติม ÷ ลิตรที่เติม (ถือว่าเติมเต็มถัง) ค่ารายเชื้อเพลิงใช้ระยะระหว่างการเติมชนิดเดียวกัน จึงเป็นค่าประมาณ เพราะรถใช้ 2 ระบบสลับกัน ค่ารวมเชื่อถือได้มากกว่า</div>';
+  return h;
+}
+function addv(){
+  return '<div class="card"><label>วันที่</label><input type="date" id="d" value="'+today()+'">'
+   +'<label>เชื้อเพลิง</label><select id="fu"><option value="p">น้ำมัน</option><option value="l">LPG</option><option value="o">อื่นๆ (น้ำมันเครื่อง ฯลฯ ไม่นับในสถิติ)</option></select>'
+   +'<label>เลขไมล์ (กม.)</label><input id="o" type="number" inputmode="decimal">'
+   +'<div class="fr"><div><label>จำนวนเงิน (บาท)</label><input id="a" type="number" inputmode="decimal" oninput="pl()"></div>'
+   +'<div><label>ลิตร (ไม่บังคับ)</label><input id="li" type="number" inputmode="decimal" oninput="pl()"></div></div>'
+   +'<div class="note" id="pp" style="margin-top:6px"></div><div class="msg" id="mg">'+msg+'</div>'
+   +'<button class="btn" onclick="add()">บันทึก</button></div>'
+   +'<div class="note">ถ้าไม่ใส่ลิตร ระบบจะประมาณจากราคา/ลิตรที่ตั้งไว้ในหน้าภาพรวม</div>';
+}
+function pl(){var a=+document.getElementById('a').value,l=+document.getElementById('li').value;document.getElementById('pp').textContent=(a>0&&l>0)?'ราคาเฉลี่ย '+f(a/l,2)+' บาท/ลิตร':''}
+function add(){
+  var d=document.getElementById('d').value,fu=document.getElementById('fu').value,o=+document.getElementById('o').value,a=+document.getElementById('a').value,l=+document.getElementById('li').value;
+  var m=document.getElementById('mg');
+  if(!d||!(o>0)||!(a>0)){m.textContent='กรอกวันที่ เลขไมล์ และจำนวนเงินให้ครบ';return}
+  data.push({id:Date.now()+''+Math.floor(Math.random()*1000),date:d,fuel:fu,odo:o,amount:a,liters:l>0?l:null});
+  save();msg='บันทึกแล้ว';tab='hs';render();
+}
+function hs(){
+  var s=enrich().reverse();
+  var h='<div class="card">';
+  if(!s.length)h+='ยังไม่มีประวัติ';
+  s.forEach(function(e){
+    h+='<div class="row"><div><span class="tag '+e.fuel+'">'+NM[e.fuel]+'</span> '+fmtD(e.date)+'<div class="note">ไมล์ '+f(e.odo,0)+(e.dA>0?' (+'+f(e.dA,0)+' กม.)':'')+' · '+(e.liters>0?f(e.liters,1)+' ล. · ':'')+f(e.amount,0)+' บาท'+(e.liters>0?' · '+f(e.amount/e.liters,2)+' บ./ล.':'')+'</div></div>'
+     +'<button class="x" onclick="del(\''+e.id+'\')">'+(armed===e.id?'ยืนยันลบ':'ลบ')+'</button></div>';
+  });
+  h+='</div><div class="card"><button class="btn s" style="margin:0" onclick="seed()">โหลดข้อมูลย้อนหลัง (ธ.ค. 2566 – ต.ค. 2569)</button><div class="note">ข้ามรายการที่มีอยู่แล้ว</div></div><div class="card"><b>สำรองข้อมูล</b><div class="note">คัดลอกข้อความนี้เก็บไว้ หรือวางข้อมูลเดิมเพื่อกู้คืน ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น</div>'
+   +'<textarea id="bk" rows="4">'+JSON.stringify(data).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</textarea>'
+   +'<button class="btn s" onclick="imp()">กู้คืนจากข้อความด้านบน</button><div class="msg" id="mg">'+msg+'</div></div>';
+  msg='';return h;
+}
+function del(id){if(armed===id){data=data.filter(function(e){return e.id!==id});save();armed=null}else armed=id;render()}
+function imp(){
+  try{
+    var d=JSON.parse(document.getElementById('bk').value);
+    if(!Array.isArray(d)||d.some(function(e){return !e||!e.date||!(e.odo>0)||!(e.amount>0)||'plo'.indexOf(e.fuel)<0}))throw 0;
+    d.forEach(function(e){if(!e.id)e.id=Date.now()+''+Math.floor(Math.random()*100000)});
+    data=d;save();msg='กู้คืนแล้ว';render();
+  }catch(e){document.getElementById('mg').textContent='รูปแบบข้อมูลไม่ถูกต้อง'}
+}
+render();
+</script>
+</body>
+</html>
