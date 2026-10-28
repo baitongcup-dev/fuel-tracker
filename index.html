@@ -46,8 +46,8 @@ var SB_URL='https://ihgxyyyaustcqrgdslbl.supabase.co',SB_KEY='eyJhbGciOiJIUzI1Ni
 var SB=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
 var data=[],PRICES={p:[],l:[]},pdb=false,popen=false;
 function localData(){try{var d=JSON.parse(localStorage.getItem(KEY));return Array.isArray(d)?d:[]}catch(e){return []}}
-function clean(e){return{date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters>0?+e.liters:null}}
-function mapRow(e){return{id:e.id,date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters==null?null:+e.liters}}
+function clean(e){var r={date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters>0?+e.liters:null};if(e.note&&String(e.note).trim())r.note=String(e.note).trim();return r}
+function mapRow(e){return{id:e.id,date:e.date,fuel:e.fuel,odo:+e.odo,amount:+e.amount,liters:e.liters==null?null:+e.liters,note:e.note||''}}
 function same(a,b){return a.date===b.date&&a.fuel===b.fuel&&+a.odo===+b.odo&&+a.amount===+b.amount}
 async function loadData(){
   var all=[],from=0,r;
@@ -290,23 +290,38 @@ function ov(){
   return h;
 }
 function addv(){
-  return '<div class="card"><label>วันที่</label><input type="date" id="d" value="'+today()+'">'
-   +'<label>เชื้อเพลิง</label><select id="fu"><option value="p">น้ำมัน</option><option value="l">LPG</option><option value="o">อื่นๆ (น้ำมันเครื่อง ฯลฯ ไม่นับในสถิติ)</option></select>'
+  return '<div class="card"><label>วันที่</label><input type="date" id="d" value="'+today()+'" onchange="pfill()">'
+   +'<label>เชื้อเพลิง</label><select id="fu" onchange="pfill()"><option value="p">น้ำมัน</option><option value="l">LPG</option><option value="o">อื่นๆ (น้ำมันเครื่อง ฯลฯ ไม่นับในสถิติ)</option></select>'
    +'<label>เลขไมล์ (กม.)</label><input id="o" type="number" inputmode="decimal">'
    +'<div class="fr"><div><label>จำนวนเงิน (บาท)</label><input id="a" type="number" inputmode="decimal" oninput="pl()"></div>'
    +'<div><label>ลิตร (ไม่บังคับ)</label><input id="li" type="number" inputmode="decimal" oninput="pl()"></div></div>'
+   +'<label>ราคา/ลิตร ณ วันที่เติม (บาท)</label><input id="pr" type="number" inputmode="decimal" step="0.01" value="'+priceAt('p',today()).toFixed(2)+'" oninput="this.dataset.t=\'1\';pl()">'
+   +'<label>หมายเหตุ (ไม่บังคับ)</label><input id="nt" type="text" maxlength="200" placeholder="เช่น ปั๊ม PTT, น้ำมันเครื่อง">'
    +'<div class="note" id="pp" style="margin-top:6px"></div><div class="msg" id="mg">'+msg+'</div>'
    +'<button class="btn" onclick="add()">บันทึก</button></div>'
-   +'<div class="note">ถ้าไม่ใส่ลิตร ระบบจะประมาณจากราคา/ลิตรที่ตั้งไว้ในหน้าภาพรวม</div>';
+   +'<div class="note">ถ้าไม่ใส่ลิตร ระบบจะคำนวณจากราคา/ลิตรด้านบน ซึ่งดึงจากตารางราคาตามวันที่ ถ้าแก้ราคาเอง ระบบจะเก็บลิตรที่คำนวณจากราคานั้นไว้</div>';
 }
-function pl(){var a=+document.getElementById('a').value,l=+document.getElementById('li').value;document.getElementById('pp').textContent=(a>0&&l>0)?'ราคาเฉลี่ย '+f(a/l,2)+' บาท/ลิตร':''}
+function pfill(){
+  var fu=document.getElementById('fu').value,d=document.getElementById('d').value,pe=document.getElementById('pr');
+  if(fu==='o'){pe.value='';pe.disabled=true}
+  else{pe.disabled=false;pe.value=d?priceAt(fu,d).toFixed(2):''}
+  pe.dataset.t='';pl();
+}
+function pl(){
+  var a=+document.getElementById('a').value,l=+document.getElementById('li').value,pv=+document.getElementById('pr').value,fu=document.getElementById('fu').value,t='';
+  if(a>0&&l>0)t='ราคาเฉลี่ย '+f(a/l,2)+' บาท/ลิตร (จากลิตรที่กรอก)';
+  else if(a>0&&pv>0&&fu!=='o')t='ประมาณ '+f(a/pv,2)+' ลิตร';
+  document.getElementById('pp').textContent=t;
+}
 async function add(){
   var d=document.getElementById('d').value,fu=document.getElementById('fu').value,o=+document.getElementById('o').value,a=+document.getElementById('a').value,l=+document.getElementById('li').value;
   var m=document.getElementById('mg');
   if(!d||!(o>0)||!(a>0)){m.textContent='กรอกวันที่ เลขไมล์ และจำนวนเงินให้ครบ';return}
+  var nt=document.getElementById('nt').value.trim();
+  var pe=document.getElementById('pr'),pv=+pe.value,lq=l>0?l:((fu!=='o'&&pe.dataset.t==='1'&&pv>0)?+(a/pv).toFixed(2):null);
   if(busy)return;busy=true;m.textContent='กำลังบันทึก...';
   try{
-    var n=await insertRows([{date:d,fuel:fu,odo:o,amount:a,liters:l>0?l:null}]);
+    var n=await insertRows([{date:d,fuel:fu,odo:o,amount:a,liters:lq,note:nt}]);
     msg=n?'บันทึกแล้ว':'มีรายการนี้อยู่แล้ว';tab='hs';render();
   }catch(e){m.textContent='บันทึกไม่สำเร็จ: '+e.message}
   busy=false;
@@ -316,7 +331,7 @@ function hs(){
   var h='<div class="card">';
   if(!s.length)h+='ยังไม่มีประวัติ';
   s.forEach(function(e){
-    h+='<div class="row"><div><span class="tag '+e.fuel+'">'+NM[e.fuel]+'</span> '+fmtD(e.date)+'<div class="note">ไมล์ '+f(e.odo,0)+(e.dA>0?' (+'+f(e.dA,0)+' กม.)':'')+' · '+(e.liters>0?f(e.liters,1)+' ล. · ':'')+f(e.amount,0)+' บาท'+(e.liters>0?' · '+f(e.amount/e.liters,2)+' บ./ล.':'')+'</div></div>'
+    h+='<div class="row"><div><span class="tag '+e.fuel+'">'+NM[e.fuel]+'</span> '+fmtD(e.date)+'<div class="note">ไมล์ '+f(e.odo,0)+(e.dA>0?' (+'+f(e.dA,0)+' กม.)':'')+' · '+(e.liters>0?f(e.liters,1)+' ล. · ':'')+f(e.amount,0)+' บาท'+(e.liters>0?' · '+f(e.amount/e.liters,2)+' บ./ล.':'')+'</div>'+(e.note?'<div class="note">📝 '+String(e.note).replace(/</g,'&lt;')+'</div>':'')+'</div>'
      +'<button class="x" onclick="del(\''+e.id+'\')">'+(armed===e.id?'ยืนยันลบ':'ลบ')+'</button></div>';
   });
   h+='</div><div class="card"><button class="btn s" style="margin:0" onclick="seed()">โหลดข้อมูลย้อนหลัง (ธ.ค. 2566 – ต.ค. 2569)</button><div class="note">ข้ามรายการที่มีอยู่แล้ว</div>'+(localData().length?'<button class="btn s" onclick="impLocal()">นำเข้าข้อมูลที่เก็บในเครื่องนี้ ('+localData().length+' รายการ)</button>':'')+'</div><div class="card"><b>สำรองข้อมูล</b><div class="note">คัดลอกข้อความนี้เก็บไว้ หรือวางข้อมูลเดิมเพื่อกู้คืน ข้อมูลหลักอยู่บนเซิร์ฟเวอร์แล้ว ข้อความนี้เป็นสำเนาเพิ่มเติม วางเพื่อนำเข้าได้ (ข้ามรายการซ้ำ)</div>'
